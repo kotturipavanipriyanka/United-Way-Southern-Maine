@@ -1,0 +1,18 @@
+comparison,chi2,p_value,dof,cramers_v,significant
+alice_status × challenges,68.426,0.0,13,0.138,True
+alice_status × engagement,15.232,0.0548,8,0.215,False
+alice_status × unheard,36.461,0.0,2,0.24,True
+age_group × challenges,84.907,0.1418,72,0.101,False
+age_group × engagement,17.748,0.9323,28,0.179,False
+age_group × unheard,21.288,0.0192,10,0.15,True
+race × challenges,59.544,0.9987,96,0.072,False
+race × engagement,16.098,0.9643,28,0.175,False
+race × unheard,18.259,0.0194,8,0.168,True
+county × challenges,49.78,0.0033,26,0.082,True
+county × engagement,16.094,0.4464,16,0.155,False
+county × unheard,6.446,0.1682,4,0.071,False
+uw_connection × challenges,35.579,0.4885,36,0.1,False
+uw_connection × engagement,13.829,0.4625,14,0.243,False
+uw_connection × unheard,13.34,0.0097,4,0.13,True
+unheard × challenges,34.47,0.1236,26,0.092,False
+unheard × engagement,44.71,0.0002,16,0.258,True
