@@ -203,6 +203,6 @@ Raw chi-square results for all tested pairings — comparison label, chi², p-va
 
 ## Authors
 
-**Pavani Kotturi & [Sharma]**
+**Pavani Kotturi & Rachita Sharma**
 MS in Artificial Intelligence — Northeastern University, Roux Institute
 CS5100 Final Project
