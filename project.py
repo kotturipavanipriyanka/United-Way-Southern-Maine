@@ -1,6 +1,6 @@
 """
 UWSM Community Needs Assessment — Analysis Pipeline
-CS5100 Final Project | Kotturi & Sharma
+CS5100 Final Project | Kotturi & Rachita Sharma
 =====================================================
 What this does:
     Loads three survey Excel files, cleans and merges them,
