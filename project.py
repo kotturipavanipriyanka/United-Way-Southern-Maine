@@ -54,91 +54,75 @@ sns.set_theme(style="whitegrid", font="DejaVu Sans")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 1 — DATA LOADING
-# Load all three Excel files, normalize headers, report what we find
+# Load all sheets from the analysis Excel file.
+# The workbook already ships pre-exploded long-form sheets for each
+# multi-select question, so we read them directly instead of splitting strings.
 # ══════════════════════════════════════════════════════════════════════════════
-
-def normalize_columns(df):
-    """Lowercase, strip, and sanitize column names for consistent access."""
-    df.columns = (
-        df.columns.astype(str)
-        .str.strip()
-        .str.lower()
-        .str.replace(r"[\s/]+", "_", regex=True)
-        .str.replace(r"[^\w]", "", regex=True)
-    )
-    return df
-
-
-def load_excel(path, label):
-    """Load all sheets from an Excel file and return as a dict of DataFrames."""
-    xl     = pd.ExcelFile(path)
-    frames = {}
-    print(f"\n  {label}  |  sheets: {xl.sheet_names}")
-    for sheet in xl.sheet_names:
-        df = normalize_columns(xl.parse(sheet))
-        print(f"    [{sheet}]  {df.shape[0]:,} rows × {df.shape[1]} cols")
-        frames[sheet] = df
-    return frames
-
 
 print("=" * 60)
 print("SECTION 1 — Loading data")
 print("=" * 60)
 
-raw_sheets  = load_excel(PATH_RAW,         "UWSM_Data.xlsx")
-anal_sheets = load_excel(PATH_ANALYSIS,    "UWSM_Analysis_Datasets.xlsx")
-resp_sheets = load_excel(PATH_RESPONDENTS, "Respondents_dataset.xlsx")
+xl = pd.ExcelFile(PATH_ANALYSIS)
+print(f"  Sheets found: {xl.sheet_names}")
 
-# Primary working frame is the analysis dataset (fully coded)
-df = list(anal_sheets.values())[0].copy()
+# Primary respondent-level frame (one row per person)
+df = xl.parse("Respondents")
+print(f"  Respondents  : {df.shape[0]:,} rows × {df.shape[1]} cols")
+
+# Pre-exploded long-form sheets (one row per response option selected)
+challenge_long = xl.parse("Challenge_Long")
+engagement_long = xl.parse("Engagement_Long")
+expense_barriers_long = xl.parse("Expense_Barriers_Long")
+supports_long = xl.parse("Supports_Long")
+
+print(f"  Challenge_Long       : {len(challenge_long):,} rows")
+print(f"  Engagement_Long      : {len(engagement_long):,} rows")
+print(f"  Expense_Barriers_Long: {len(expense_barriers_long):,} rows")
+print(f"  Supports_Long        : {len(supports_long):,} rows")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 2 — COLUMN DETECTION
-# Instead of hardcoding headers (which change), we keyword-match column names.
-# This makes the script resilient to minor header variations across file versions.
+# SECTION 2 — COLUMN NAMES
+# Exact column names as they appear in the dataset (confirmed from inspection).
 # ══════════════════════════════════════════════════════════════════════════════
-
-def find_col(df, *keywords):
-    """Return first column whose name contains any of the given keywords."""
-    for kw in keywords:
-        for col in df.columns:
-            if kw.lower() in col.lower():
-                return col
-    return None
-
 
 print("\n" + "=" * 60)
-print("SECTION 2 — Detecting columns")
+print("SECTION 2 — Column references")
 print("=" * 60)
 
-COL = {
-    "id"          : find_col(df, "id", "unique"),
-    "survey_type" : find_col(df, "survey_type", "survey"),
-    "challenges"  : find_col(df, "challenge", "biggest"),
-    "county"      : find_col(df, "county"),
-    "alice"       : find_col(df, "alice_status", "alice"),
-    "unheard"     : find_col(df, "unheard", "heard"),
-    "community"   : find_col(df, "community", "group"),
-    "age"         : find_col(df, "age_group", "age"),
-    "race"        : find_col(df, "race", "ethnicity"),
-    "connection"  : find_col(df, "connection", "uwsm", "connect"),
-    "engagement"  : find_col(df, "engagement", "involved"),
-    "hardest_bill": find_col(df, "hardest", "bill", "expense"),
-    "barriers"    : find_col(df, "barrier", "getting_in"),
-    "supports"    : find_col(df, "support", "helpful"),
-    "five_yr"     : find_col(df, "five", "5_year", "goal"),
-    "zip"         : find_col(df, "zip"),
-}
+# Respondents sheet columns
+COL_ID          = "id"
+COL_SURVEY_TYPE = "survey_type"
+COL_COUNTY      = "County"
+COL_ALICE       = "ALICE_status"          # values: "Below ALICE", "Above ALICE"
+COL_UNHEARD     = "unheard"               # values: "Yes", "No", "Maybe"
+COL_AGE         = "age_group"
+COL_RACE        = "race"
+COL_CONNECTION  = "UW_connection"
+COL_HARDEST_EXP = "hardest_expenses"
+COL_FIVE_YR     = "Community_Voice"       # closest proxy for 5-year / voice goal
+COL_ZIP         = "zip"
 
-for k, v in COL.items():
-    status = v if v else "NOT FOUND"
-    print(f"    {k:15s} → {status}")
+# Long-form sheet value columns (the exploded answer per row)
+COL_CHALLENGE_CODE  = "challenge_code"    # Challenge_Long
+COL_ENGAGEMENT      = "Engagement"        # Engagement_Long
+COL_EXP_BARRIER     = "Expense_barriers"  # Expense_Barriers_Long
+COL_SUPPORT         = "Supports"          # Supports_Long
+
+for name, val in {
+    "county": COL_COUNTY, "alice": COL_ALICE, "unheard": COL_UNHEARD,
+    "age": COL_AGE, "race": COL_RACE, "connection": COL_CONNECTION,
+    "hardest_expenses": COL_HARDEST_EXP, "community_voice": COL_FIVE_YR,
+    "challenge_code (long)": COL_CHALLENGE_CODE,
+    "engagement (long)": COL_ENGAGEMENT,
+}.items():
+    print(f"    {name:25s} → {val}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 3 — CLEANING & FILTERING
-# Fix duplicate columns, standardize strings, filter to Southern Maine,
+# Standardize strings, filter to Southern Maine counties,
 # and create boolean helper flags for ALICE and unheard respondents.
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -146,96 +130,47 @@ print("\n" + "=" * 60)
 print("SECTION 3 — Cleaning & filtering")
 print("=" * 60)
 
-# Drop duplicate column names before any string ops — pandas chokes on them
-df = df.loc[:, ~df.columns.duplicated()].copy()
+def clean_strings(frame):
+    """Strip whitespace and replace empty / 'nan' strings with NaN."""
+    for col in frame.select_dtypes("object").columns:
+        frame[col] = frame[col].astype(str).str.strip().replace(
+            {"nan": np.nan, "": np.nan, "None": np.nan}
+        )
+    return frame
 
-# Standardize all text fields: strip whitespace, replace "nan" strings with NaN
-for col in df.select_dtypes("object").columns:
-    df[col] = df[col].astype(str).str.strip().replace({"nan": np.nan, "": np.nan})
+df                    = clean_strings(df)
+challenge_long        = clean_strings(challenge_long)
+engagement_long       = clean_strings(engagement_long)
+expense_barriers_long = clean_strings(expense_barriers_long)
+supports_long         = clean_strings(supports_long)
 
 # Keep only Cumberland and York — the two Southern Maine counties in scope
-county_col = COL["county"]
-if county_col:
-    before = len(df)
-    df = df[df[county_col].isin(["Cumberland", "York", "Cumberland & York"])].copy()
-    print(f"  County filter : {before:,} → {len(df):,} rows")
+before = len(df)
+df = df[df[COL_COUNTY].isin(["Cumberland", "York", "Cumberland & York"])].copy()
+print(f"  County filter : {before:,} → {len(df):,} rows")
+
+# Apply same county filter to all long-form sheets
+valid_ids = set(df[COL_ID])
+challenge_long        = challenge_long[challenge_long[COL_ID].isin(valid_ids)].copy()
+engagement_long       = engagement_long[engagement_long[COL_ID].isin(valid_ids)].copy()
+expense_barriers_long = expense_barriers_long[expense_barriers_long[COL_ID].isin(valid_ids)].copy()
+supports_long         = supports_long[supports_long[COL_ID].isin(valid_ids)].copy()
 
 # ALICE flag — households that are asset-limited, income-constrained
-alice_col = COL["alice"]
-if alice_col:
-    df["is_alice"] = df[alice_col].str.contains("Below", na=False)
-    print(f"  ALICE (Below) : {df['is_alice'].sum():,} respondents")
+df["is_alice"] = df[COL_ALICE].str.contains("Below", na=False)
+print(f"  ALICE (Below) : {df['is_alice'].sum():,} respondents")
 
-# Unheard flag — respondents who feel their community voice isn't heard
-# Try multiple possible value formats since coding varies across survey versions
-unheard_col = COL["unheard"]
-if unheard_col:
-    raw_vals = df[unheard_col].dropna().unique()
-    print(f"  Unheard values found: {raw_vals[:10]}")
-    df["is_unheard"] = df[unheard_col].str.strip().str.lower().isin(
-        ["unheard", "yes", "maybe", "not heard"]
-    )
-    print(f"  Unheard       : {df['is_unheard'].sum():,} respondents")
+# Unheard flag — "Yes" or "Maybe" both indicate some degree of feeling unheard
+df["is_unheard"] = df[COL_UNHEARD].isin(["Yes", "Maybe"])
+print(f"  Unheard (Yes/Maybe): {df['is_unheard'].sum():,} respondents")
 
 print(f"  Final dataset : {len(df):,} rows × {df.shape[1]} cols")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 4 — EXPLODING MULTI-SELECT COLUMNS
-# "Check all that apply" answers are stored as semicolon-separated strings.
-# We split them into one row per answer so they can be counted and compared.
-# Example: "Housing Cost; Food Access" → two separate rows
-# ══════════════════════════════════════════════════════════════════════════════
-
-def explode_multi(df, col_key, sep=";"):
-    """
-    Convert a semicolon-separated multi-select column into long-form rows.
-    Each answer gets its own row, with all demographic context columns attached.
-    Returns an empty DataFrame if the column doesn't exist.
-    """
-    col = COL.get(col_key)
-    if not col or col not in df.columns:
-        return pd.DataFrame()
-
-    id_col = COL["id"] or df.columns[0]
-
-    # Gather demographic context columns — skip any that weren't detected
-    context_cols = [
-        alice_col, county_col, COL["age"], COL["race"],
-        COL["connection"], unheard_col
-    ]
-    keep = [id_col, col]
-    for c in context_cols:
-        if c and c in df.columns and c not in keep:
-            keep.append(c)
-
-    tmp = df[keep].copy()
-    tmp = tmp.loc[:, ~tmp.columns.duplicated()].reset_index(drop=True)
-
-    # Split the semicolon string and explode into separate rows
-    tmp[col] = tmp[col].astype(str).str.split(sep)
-    tmp      = tmp.explode(col).reset_index(drop=True)
-    tmp[col] = tmp[col].astype(str).str.strip().replace({"nan": np.nan, "": np.nan})
-
-    return tmp.dropna(subset=[col])
-
-
-print("\n" + "=" * 60)
-print("SECTION 4 — Exploding multi-select columns")
-print("=" * 60)
-
-EX = {k: explode_multi(df, k)
-      for k in ["challenges", "engagement", "hardest_bill", "barriers", "supports"]}
-
-for k, v in EX.items():
-    print(f"  [{k}] → {len(v):,} response rows")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 5 — STATISTICAL ANALYSIS
+# SECTION 4 — STATISTICAL ANALYSIS
 # Chi-square tests measure whether two categorical variables are independent.
-# Cramér's V gives us effect size — how strong the association actually is.
-# We test every meaningful demographic × outcome pairing.
+# Cramér's V gives effect size — how strong the association actually is.
 # ══════════════════════════════════════════════════════════════════════════════
 
 def cramers_v(ct):
@@ -247,13 +182,12 @@ def cramers_v(ct):
     return np.sqrt(chi2 / denom) if denom > 0 else 0
 
 
-def chi_test(df, col_a, col_b, min_n=5):
+def chi_test(frame, col_a, col_b, min_n=5):
     """
     Run chi-square test between two categorical columns.
-    Drops cells with fewer than min_n responses to avoid unreliable results.
-    Returns None if there isn't enough data to run the test.
+    Returns None if there isn't enough data.
     """
-    sub = df[[col_a, col_b]].dropna().reset_index(drop=True)
+    sub = frame[[col_a, col_b]].dropna()
     ct  = pd.crosstab(sub[col_a], sub[col_b])
     ct  = ct.loc[ct.sum(axis=1) >= min_n, ct.sum(axis=0) >= min_n]
 
@@ -272,26 +206,30 @@ def chi_test(df, col_a, col_b, min_n=5):
 
 
 print("\n" + "=" * 60)
-print("SECTION 5 — Statistical analysis")
+print("SECTION 4 — Statistical analysis")
 print("=" * 60)
 
 results  = []
-grp_cols = [c for c in [alice_col, COL["age"], COL["race"],
-                         county_col, COL["connection"], unheard_col]
-            if c and c in df.columns]
+grp_cols = [COL_ALICE, COL_AGE, COL_RACE, COL_COUNTY, COL_CONNECTION, COL_UNHEARD]
 
-# Test each demographic group variable against each multi-select outcome
+# Test each demographic group against each long-form outcome
+long_frames = {
+    "challenge_code"  : (challenge_long,        COL_CHALLENGE_CODE),
+    "engagement"      : (engagement_long,        COL_ENGAGEMENT),
+    "expense_barriers": (expense_barriers_long,  COL_EXP_BARRIER),
+    "supports"        : (supports_long,          COL_SUPPORT),
+}
+
 for gv in grp_cols:
-    for ex_key, ex_df in EX.items():
-        val_col = COL.get(ex_key)
-        if val_col and val_col in ex_df.columns and gv in ex_df.columns:
-            r = chi_test(ex_df, gv, val_col)
+    for key, (frame, val_col) in long_frames.items():
+        if val_col in frame.columns and gv in frame.columns:
+            r = chi_test(frame, gv, val_col)
             if r:
                 results.append(r)
 
-    # Also test against single-answer outcome columns
-    for col in [unheard_col, COL["five_yr"]]:
-        if col and col in df.columns and col != gv:
+    # Single-answer outcome columns on the main respondents frame
+    for col in [COL_UNHEARD, COL_FIVE_YR]:
+        if col in df.columns and col != gv:
             r = chi_test(df, gv, col)
             if r:
                 results.append(r)
@@ -303,9 +241,7 @@ print(f"  {len(stats_df)} tests run | "
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 6 — VISUALIZATION HELPERS
-# Three reusable chart builders that handle layout, labels, and styling.
-# Every chart saves directly to figures/ via save().
+# SECTION 5 — VISUALIZATION HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
 def save(name):
@@ -319,7 +255,7 @@ def save(name):
 def hbar(series, title, xlabel="Count", top_n=12, color=C["navy"],
          pct=False, figsize=(10, 6)):
     """Horizontal bar chart — best for ranked categorical data."""
-    data = series.value_counts().head(top_n)
+    data = series.dropna().value_counts().head(top_n)
     if pct:
         data = (data / data.sum() * 100).round(1)
 
@@ -327,7 +263,6 @@ def hbar(series, title, xlabel="Count", top_n=12, color=C["navy"],
     bars = ax.barh(data.index[::-1], data.values[::-1],
                    color=color, edgecolor="white", linewidth=0.5)
 
-    # Inline value labels on each bar
     for bar, val in zip(bars, data.values[::-1]):
         lbl = f"{val:.1f}%" if pct else f"{int(val):,}"
         ax.text(bar.get_width() + 0.2,
@@ -342,10 +277,7 @@ def hbar(series, title, xlabel="Count", top_n=12, color=C["navy"],
 
 
 def grouped_pct_bar(ct, title, figsize=(12, 6)):
-    """
-    Stacked 100% bar chart — shows composition within each group.
-    Ideal for comparing how response distributions shift across demographics.
-    """
+    """Stacked 100% bar chart — shows composition within each group."""
     pct = ct.div(ct.sum(axis=1), axis=0) * 100
     fig, ax = plt.subplots(figsize=figsize)
     pct.plot(kind="bar", stacked=True, ax=ax,
@@ -361,10 +293,7 @@ def grouped_pct_bar(ct, title, figsize=(12, 6)):
 
 
 def heatmap_chart(ct, title, figsize=(13, 7)):
-    """
-    Percentage heatmap — useful when there are many categories on both axes.
-    Normalizes by row so each group's distribution is directly comparable.
-    """
+    """Percentage heatmap — normalizes by row for direct group comparison."""
     pct = ct.div(ct.sum(axis=1), axis=0) * 100
     fig, ax = plt.subplots(figsize=figsize)
     sns.heatmap(pct, annot=True, fmt=".1f", cmap="Blues",
@@ -375,24 +304,12 @@ def heatmap_chart(ct, title, figsize=(13, 7)):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 7 — GENERATING ALL CHARTS
-# Organized into four themes: Demographics, Challenges, Unheard Communities,
-# Engagement & ALICE-specific findings.
+# SECTION 6 — GENERATING ALL CHARTS
 # ══════════════════════════════════════════════════════════════════════════════
 
 print("\n" + "=" * 60)
 print("SECTION 6 — Generating charts → figures/")
 print("=" * 60)
-
-# Shorthand references for frequently used column names
-ch_col   = COL["challenges"]
-eng_col  = COL["engagement"]
-bl_col   = COL["hardest_bill"]
-fy_col   = COL["five_yr"]
-age_col  = COL["age"]
-race_col = COL["race"]
-con_col  = COL["connection"]
-id_col   = COL["id"] or df.columns[0]
 
 # ── Theme 1: Who responded? ───────────────────────────────────────────────────
 fig, axes = plt.subplots(2, 2, figsize=(14, 10))
@@ -400,12 +317,12 @@ fig.suptitle("Survey Respondent Demographics — Southern Maine",
              fontsize=15, fontweight="bold", color=C["navy"])
 
 for (col, label), ax in zip(
-    [(county_col, "County"), (alice_col, "ALICE Status"),
-     (age_col,   "Age Group"), (race_col, "Race / Ethnicity")],
+    [(COL_COUNTY, "County"), (COL_ALICE, "ALICE Status"),
+     (COL_AGE,   "Age Group"), (COL_RACE, "Race / Ethnicity")],
     axes.flatten()
 ):
-    if col and col in df.columns:
-        counts = df[col].value_counts().head(8)
+    if col in df.columns:
+        counts = df[col].dropna().value_counts().head(8)
         ax.barh(counts.index[::-1], counts.values[::-1],
                 color=C["navy"], edgecolor="white")
         ax.set_title(label, fontsize=11, fontweight="bold")
@@ -416,117 +333,117 @@ save("00_demographics_overview")
 
 # ── Theme 2: Community Challenges ────────────────────────────────────────────
 
-if ch_col and len(EX["challenges"]) > 0:
+if COL_CHALLENGE_CODE in challenge_long.columns and len(challenge_long) > 0:
 
     # Overall top challenges
-    hbar(EX["challenges"][ch_col],
+    hbar(challenge_long[COL_CHALLENGE_CODE],
          "Top Community Challenges — Southern Maine",
          color=C["navy"])
     save("01_top_challenges_overall")
 
-    # Challenges by ALICE status — heatmap works well here (2 groups, many challenges)
-    if alice_col:
-        top10 = EX["challenges"][ch_col].value_counts().head(10).index
-        sub   = EX["challenges"][EX["challenges"][ch_col].isin(top10)]
-        ct    = pd.crosstab(sub[alice_col], sub[ch_col])
+    # Challenges by ALICE status
+    if COL_ALICE in challenge_long.columns:
+        top10 = challenge_long[COL_CHALLENGE_CODE].value_counts().head(10).index
+        sub   = challenge_long[challenge_long[COL_CHALLENGE_CODE].isin(top10)]
+        ct    = pd.crosstab(sub[COL_ALICE], sub[COL_CHALLENGE_CODE])
         heatmap_chart(ct, "Challenges by ALICE Status (% within group)")
         save("02_challenges_by_alice")
 
-    # Challenges by age — stacked bar shows how priorities shift with age
-    if age_col:
-        top8 = EX["challenges"][ch_col].value_counts().head(8).index
-        sub  = EX["challenges"][EX["challenges"][ch_col].isin(top8)]
-        ct   = pd.crosstab(sub[age_col], sub[ch_col])
+    # Challenges by age group
+    if COL_AGE in challenge_long.columns:
+        top8 = challenge_long[COL_CHALLENGE_CODE].value_counts().head(8).index
+        sub  = challenge_long[challenge_long[COL_CHALLENGE_CODE].isin(top8)]
+        ct   = pd.crosstab(sub[COL_AGE], sub[COL_CHALLENGE_CODE])
         grouped_pct_bar(ct, "Challenges by Age Group")
         save("03_challenges_by_age")
 
-    # Challenges by county — Cumberland vs York
-    if county_col:
-        top8 = EX["challenges"][ch_col].value_counts().head(8).index
-        sub  = EX["challenges"][EX["challenges"][ch_col].isin(top8)]
-        ct   = pd.crosstab(sub[county_col], sub[ch_col])
+    # Challenges by county
+    if COL_COUNTY in challenge_long.columns:
+        top8 = challenge_long[COL_CHALLENGE_CODE].value_counts().head(8).index
+        sub  = challenge_long[challenge_long[COL_CHALLENGE_CODE].isin(top8)]
+        ct   = pd.crosstab(sub[COL_COUNTY], sub[COL_CHALLENGE_CODE])
         grouped_pct_bar(ct, "Challenges by County — Cumberland vs York")
         save("04_challenges_by_county")
 
-    # Challenges by race/ethnicity — heatmap handles many groups cleanly
-    if race_col:
-        top8 = EX["challenges"][ch_col].value_counts().head(8).index
-        sub  = EX["challenges"][EX["challenges"][ch_col].isin(top8)]
-        ct   = pd.crosstab(sub[race_col], sub[ch_col])
+    # Challenges by race/ethnicity
+    if COL_RACE in challenge_long.columns:
+        top8 = challenge_long[COL_CHALLENGE_CODE].value_counts().head(8).index
+        sub  = challenge_long[challenge_long[COL_CHALLENGE_CODE].isin(top8)]
+        ct   = pd.crosstab(sub[COL_RACE], sub[COL_CHALLENGE_CODE])
         heatmap_chart(ct, "Challenges by Race / Ethnicity (% within group)",
                       figsize=(14, 8))
         save("05_challenges_by_race")
 
     # Challenges by UWSM connection level
-    if con_col:
-        top8 = EX["challenges"][ch_col].value_counts().head(8).index
-        sub  = EX["challenges"][EX["challenges"][ch_col].isin(top8)]
-        ct   = pd.crosstab(sub[con_col], sub[ch_col])
+    if COL_CONNECTION in challenge_long.columns:
+        top8 = challenge_long[COL_CHALLENGE_CODE].value_counts().head(8).index
+        sub  = challenge_long[challenge_long[COL_CHALLENGE_CODE].isin(top8)]
+        ct   = pd.crosstab(sub[COL_CONNECTION], sub[COL_CHALLENGE_CODE])
         grouped_pct_bar(ct, "Challenges by UWSM Connection Level")
         save("06_challenges_by_connection")
 
 # ── Theme 3: Who Feels Unheard? ───────────────────────────────────────────────
 
-if unheard_col:
+if COL_UNHEARD in df.columns:
 
-    if alice_col:
-        ct = pd.crosstab(df[alice_col], df[unheard_col])
+    if COL_ALICE in df.columns:
+        ct = pd.crosstab(df[COL_ALICE], df[COL_UNHEARD])
         grouped_pct_bar(ct, "Feeling Unheard by ALICE Status", figsize=(8, 5))
         save("07_unheard_by_alice")
 
-    if age_col:
-        ct = pd.crosstab(df[age_col], df[unheard_col])
+    if COL_AGE in df.columns:
+        ct = pd.crosstab(df[COL_AGE], df[COL_UNHEARD])
         grouped_pct_bar(ct, "Feeling Unheard by Age Group", figsize=(9, 5))
         save("08_unheard_by_age")
 
-    if race_col:
-        ct = pd.crosstab(df[race_col], df[unheard_col])
+    if COL_RACE in df.columns:
+        ct = pd.crosstab(df[COL_RACE], df[COL_UNHEARD])
         grouped_pct_bar(ct, "Feeling Unheard by Race / Ethnicity", figsize=(10, 6))
         save("09_unheard_by_race")
 
     # Do unheard communities face systematically different challenges?
-    if ch_col and len(EX["challenges"]) > 0:
-        top8 = EX["challenges"][ch_col].value_counts().head(8).index
-        sub  = EX["challenges"][EX["challenges"][ch_col].isin(top8)]
-        ct   = pd.crosstab(sub[unheard_col], sub[ch_col])
+    if COL_UNHEARD in challenge_long.columns and len(challenge_long) > 0:
+        top8 = challenge_long[COL_CHALLENGE_CODE].value_counts().head(8).index
+        sub  = challenge_long[challenge_long[COL_CHALLENGE_CODE].isin(top8)]
+        ct   = pd.crosstab(sub[COL_UNHEARD], sub[COL_CHALLENGE_CODE])
         grouped_pct_bar(ct, "Challenges: Unheard vs Heard Communities")
         save("10_challenges_unheard_vs_heard")
 
 # ── Theme 4: Engagement & ALICE-Specific Findings ────────────────────────────
 
-if eng_col and len(EX["engagement"]) > 0:
+if COL_ENGAGEMENT in engagement_long.columns and len(engagement_long) > 0:
 
-    hbar(EX["engagement"][eng_col],
+    hbar(engagement_long[COL_ENGAGEMENT],
          "How Residents Want to Get Involved", color=C["orange"])
     save("11_engagement_overall")
 
-    if alice_col:
-        ct = pd.crosstab(EX["engagement"][alice_col], EX["engagement"][eng_col])
+    if COL_ALICE in engagement_long.columns:
+        ct = pd.crosstab(engagement_long[COL_ALICE], engagement_long[COL_ENGAGEMENT])
         grouped_pct_bar(ct, "Engagement Preferences by ALICE Status")
         save("12_engagement_by_alice")
 
-    if age_col:
-        ct = pd.crosstab(EX["engagement"][age_col], EX["engagement"][eng_col])
+    if COL_AGE in engagement_long.columns:
+        ct = pd.crosstab(engagement_long[COL_AGE], engagement_long[COL_ENGAGEMENT])
         grouped_pct_bar(ct, "Engagement Preferences by Age Group")
         save("13_engagement_by_age")
 
-# Hardest bills — ALICE households only
-if bl_col and "is_alice" in df.columns and len(EX["hardest_bill"]) > 0:
-    alice_ids  = df[df["is_alice"]][id_col]
-    alice_bills = EX["hardest_bill"][EX["hardest_bill"][id_col].isin(alice_ids)]
-    if len(alice_bills) > 0:
-        hbar(alice_bills[bl_col],
-             "Hardest Bills to Afford — ALICE Households", color=C["green"])
-        save("14_hardest_bills_alice")
+# Hardest expenses — ALICE households only
+if COL_HARDEST_EXP in df.columns and "is_alice" in df.columns:
+    alice_exp = df[df["is_alice"]][COL_HARDEST_EXP].dropna()
+    if len(alice_exp) > 0:
+        hbar(alice_exp,
+             "Hardest Expenses to Afford — ALICE Households", color=C["green"])
+        save("14_hardest_expenses_alice")
 
-# 5-year goals — ALICE households only
-if fy_col and "is_alice" in df.columns:
-    alice_goals = df[df["is_alice"]][fy_col].dropna()
-    if len(alice_goals) > 0:
-        hbar(alice_goals, "5-Year Goals — ALICE Households", color=C["purple"])
-        save("15_five_yr_goals_alice")
+# Community voice / 5-year goal — ALICE households only
+if COL_FIVE_YR in df.columns and "is_alice" in df.columns:
+    alice_voice = df[df["is_alice"]][COL_FIVE_YR].dropna()
+    if len(alice_voice) > 0:
+        hbar(alice_voice, "Community Voice Responses — ALICE Households",
+             color=C["purple"])
+        save("15_community_voice_alice")
 
-# Statistical significance summary — which associations are actually meaningful?
+# Statistical significance summary
 if len(stats_df) > 0:
     sig = (stats_df[stats_df["significant"]]
            .sort_values("cramers_v", ascending=False)
@@ -550,9 +467,7 @@ if len(stats_df) > 0:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 8 — EXPORT SUMMARY TABLES
-# Everything a report writer needs: counts, percentages, crosstabs, and the
-# full cleaned dataset — all in one workbook with clearly named sheets.
+# SECTION 7 — EXPORT SUMMARY TABLES
 # ══════════════════════════════════════════════════════════════════════════════
 
 print("\n" + "=" * 60)
@@ -562,52 +477,46 @@ print("=" * 60)
 with pd.ExcelWriter("outputs/uwsm_summary_tables.xlsx", engine="openpyxl") as writer:
 
     # Overall challenge frequency
-    if ch_col and len(EX["challenges"]) > 0:
-        c = EX["challenges"][ch_col].value_counts().reset_index()
+    if COL_CHALLENGE_CODE in challenge_long.columns:
+        c = challenge_long[COL_CHALLENGE_CODE].value_counts().reset_index()
         c.columns = ["Challenge", "Count"]
         c["Pct_of_Respondents"] = (c["Count"] / len(df) * 100).round(1)
         c.to_excel(writer, sheet_name="Challenges_Overall", index=False)
 
     # Challenge breakdown by ALICE status
-    if ch_col and alice_col and len(EX["challenges"]) > 0:
-        ct = pd.crosstab(EX["challenges"][ch_col], EX["challenges"][alice_col],
+    if COL_CHALLENGE_CODE in challenge_long.columns and COL_ALICE in challenge_long.columns:
+        ct = pd.crosstab(challenge_long[COL_CHALLENGE_CODE],
+                         challenge_long[COL_ALICE],
                          normalize="columns").mul(100).round(1)
         ct.to_excel(writer, sheet_name="Challenges_by_ALICE")
 
     # Challenge breakdown by county
-    if ch_col and county_col and len(EX["challenges"]) > 0:
-        ct = pd.crosstab(EX["challenges"][ch_col], EX["challenges"][county_col],
+    if COL_CHALLENGE_CODE in challenge_long.columns and COL_COUNTY in challenge_long.columns:
+        ct = pd.crosstab(challenge_long[COL_CHALLENGE_CODE],
+                         challenge_long[COL_COUNTY],
                          normalize="columns").mul(100).round(1)
         ct.to_excel(writer, sheet_name="Challenges_by_County")
 
     # Engagement preferences
-    if eng_col and len(EX["engagement"]) > 0:
-        e = EX["engagement"][eng_col].value_counts().reset_index()
+    if COL_ENGAGEMENT in engagement_long.columns:
+        e = engagement_long[COL_ENGAGEMENT].value_counts().reset_index()
         e.columns = ["Engagement_Type", "Count"]
         e["Pct"] = (e["Count"] / len(df) * 100).round(1)
         e.to_excel(writer, sheet_name="Engagement_Overall", index=False)
 
     # Who feels unheard — broken down by each demographic
-    if unheard_col:
-        for gv in [alice_col, age_col, race_col, county_col]:
-            if gv and gv in df.columns:
-                ct = pd.crosstab(df[gv], df[unheard_col],
+    if COL_UNHEARD in df.columns:
+        for gv in [COL_ALICE, COL_AGE, COL_RACE, COL_COUNTY]:
+            if gv in df.columns:
+                ct = pd.crosstab(df[gv], df[COL_UNHEARD],
                                  normalize="index").mul(100).round(1)
                 ct.to_excel(writer, sheet_name=f"Unheard_by_{gv[:12]}")
 
-    # ALICE-specific: 5-year goals
-    if fy_col and "is_alice" in df.columns:
-        goals = df[df["is_alice"]][fy_col].value_counts().reset_index()
-        goals.columns = ["Goal", "Count"]
-        goals.to_excel(writer, sheet_name="ALICE_5yr_Goals", index=False)
-
-    # ALICE-specific: hardest bills
-    if bl_col and "is_alice" in df.columns and len(EX["hardest_bill"]) > 0:
-        alice_ids   = df[df["is_alice"]][id_col]
-        alice_bills = EX["hardest_bill"][EX["hardest_bill"][id_col].isin(alice_ids)]
-        b = alice_bills[bl_col].value_counts().reset_index()
-        b.columns = ["Bill_Type", "Count"]
-        b.to_excel(writer, sheet_name="ALICE_Hardest_Bills", index=False)
+    # ALICE-specific: hardest expenses
+    if COL_HARDEST_EXP in df.columns and "is_alice" in df.columns:
+        b = df[df["is_alice"]][COL_HARDEST_EXP].value_counts().reset_index()
+        b.columns = ["Expense_Type", "Count"]
+        b.to_excel(writer, sheet_name="ALICE_Hardest_Expenses", index=False)
 
     # All chi-square test results
     if len(stats_df) > 0:
