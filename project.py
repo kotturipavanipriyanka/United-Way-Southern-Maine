@@ -1,22 +1,7 @@
 """
 UWSM Community Needs Assessment — Analysis Pipeline
 CS5100 Final Project | Kotturi & Rachita Sharma
-=====================================================
-What this does:
-    Loads three survey Excel files, cleans and merges them,
-    runs statistical comparisons across demographic groups,
-    generates publication-ready charts, and exports summary tables.
-
-Data:
-    data/UWSM_Data.xlsx               → raw survey responses
-    data/UWSM_Analysis_Datasets.xlsx  → cleaned & coded dataset (primary)
-    data/Respondents_dataset.xlsx     → respondent demographics
-
-Outputs:
-    figures/  → all charts as .png
-    outputs/  → summary Excel workbook + stats CSV
 """
-
 import os
 import warnings
 import pandas as pd
@@ -26,18 +11,15 @@ import matplotlib.ticker as mtick
 import seaborn as sns
 from scipy.stats import chi2_contingency
 
+# adding some flavor text to make the figures look more popping and adding path to the analysis to be replated with future datasets
 warnings.filterwarnings("ignore")
 
-# ── Output directories ────────────────────────────────────────────────────────
 os.makedirs("figures", exist_ok=True)
 os.makedirs("outputs", exist_ok=True)
-
-# ── File paths ────────────────────────────────────────────────────────────────
 PATH_RAW         = "data/UWSM_Data.xlsx"
 PATH_ANALYSIS    = "data/UWSM_Analysis_Datasets.xlsx"
 PATH_RESPONDENTS = "data/Respondents_dataset.xlsx"
 
-# ── Brand colors & style ──────────────────────────────────────────────────────
 C = {
     "navy"   : "#1B3F6E",
     "orange" : "#E87722",
@@ -52,23 +34,11 @@ PALETTE = list(C.values())
 sns.set_theme(style="whitegrid", font="DejaVu Sans")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 1 — DATA LOADING
-# Load all sheets from the analysis Excel file.
-# The workbook already ships pre-exploded long-form sheets for each
-# multi-select question, so we read them directly instead of splitting strings.
-# ══════════════════════════════════════════════════════════════════════════════
-
-print("=" * 60)
-print("SECTION 1 — Loading data")
-print("=" * 60)
 
 xl = pd.ExcelFile(PATH_ANALYSIS)
-print(f"  Sheets found: {xl.sheet_names}")
 
 # Primary respondent-level frame (one row per person)
 df = xl.parse("Respondents")
-print(f"  Respondents  : {df.shape[0]:,} rows × {df.shape[1]} cols")
 
 # Pre-exploded long-form sheets (one row per response option selected)
 challenge_long = xl.parse("Challenge_Long")
@@ -82,15 +52,6 @@ print(f"  Expense_Barriers_Long: {len(expense_barriers_long):,} rows")
 print(f"  Supports_Long        : {len(supports_long):,} rows")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 2 — COLUMN NAMES
-# Exact column names as they appear in the dataset (confirmed from inspection).
-# ══════════════════════════════════════════════════════════════════════════════
-
-print("\n" + "=" * 60)
-print("SECTION 2 — Column references")
-print("=" * 60)
-
 # Respondents sheet columns
 COL_ID          = "id"
 COL_SURVEY_TYPE = "survey_type"
@@ -101,7 +62,7 @@ COL_AGE         = "age_group"
 COL_RACE        = "race"
 COL_CONNECTION  = "UW_connection"
 COL_HARDEST_EXP = "hardest_expenses"
-COL_FIVE_YR     = "Community_Voice"       # closest proxy for 5-year / voice goal
+COL_FIVE_YR     = "Community_Voice"       # closest proxy for 5-year due to new dataset not having 5 year column
 COL_ZIP         = "zip"
 
 # Long-form sheet value columns (the exploded answer per row)
@@ -110,25 +71,9 @@ COL_ENGAGEMENT      = "Engagement"        # Engagement_Long
 COL_EXP_BARRIER     = "Expense_barriers"  # Expense_Barriers_Long
 COL_SUPPORT         = "Supports"          # Supports_Long
 
-for name, val in {
-    "county": COL_COUNTY, "alice": COL_ALICE, "unheard": COL_UNHEARD,
-    "age": COL_AGE, "race": COL_RACE, "connection": COL_CONNECTION,
-    "hardest_expenses": COL_HARDEST_EXP, "community_voice": COL_FIVE_YR,
-    "challenge_code (long)": COL_CHALLENGE_CODE,
-    "engagement (long)": COL_ENGAGEMENT,
-}.items():
-    print(f"    {name:25s} → {val}")
 
+# Standardize strings, filter to Southern Maine counties
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 — CLEANING & FILTERING
-# Standardize strings, filter to Southern Maine counties,
-# and create boolean helper flags for ALICE and unheard respondents.
-# ══════════════════════════════════════════════════════════════════════════════
-
-print("\n" + "=" * 60)
-print("SECTION 3 — Cleaning & filtering")
-print("=" * 60)
 
 def clean_strings(frame):
     """Strip whitespace and replace empty / 'nan' strings with NaN."""
@@ -167,11 +112,7 @@ print(f"  Unheard (Yes/Maybe): {df['is_unheard'].sum():,} respondents")
 print(f"  Final dataset : {len(df):,} rows × {df.shape[1]} cols")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 4 — STATISTICAL ANALYSIS
-# Chi-square tests measure whether two categorical variables are independent.
-# Cramér's V gives effect size — how strong the association actually is.
-# ══════════════════════════════════════════════════════════════════════════════
+#Statiistical analysis
 
 def cramers_v(ct):
     """Effect size for chi-square. Range 0 (none) to 1 (perfect association)."""
@@ -205,9 +146,6 @@ def chi_test(frame, col_a, col_b, min_n=5):
     }
 
 
-print("\n" + "=" * 60)
-print("SECTION 4 — Statistical analysis")
-print("=" * 60)
 
 results  = []
 grp_cols = [COL_ALICE, COL_AGE, COL_RACE, COL_COUNTY, COL_CONNECTION, COL_UNHEARD]
@@ -240,10 +178,7 @@ print(f"  {len(stats_df)} tests run | "
       f"{stats_df['significant'].sum()} significant (p < 0.05)")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 5 — VISUALIZATION HELPERS
-# ══════════════════════════════════════════════════════════════════════════════
-
+# Create all the figures models for the heat map and bar charts to be pushed to figure folder
 def save(name):
     """Save current figure to figures/ and close it cleanly."""
     path = f"figures/{name}.png"
@@ -303,15 +238,8 @@ def heatmap_chart(ct, title, figsize=(13, 7)):
     return fig
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 6 — GENERATING ALL CHARTS
-# ══════════════════════════════════════════════════════════════════════════════
+# GENERATING ALL CHARTS
 
-print("\n" + "=" * 60)
-print("SECTION 6 — Generating charts → figures/")
-print("=" * 60)
-
-# ── Theme 1: Who responded? ───────────────────────────────────────────────────
 fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 fig.suptitle("Survey Respondent Demographics — Southern Maine",
              fontsize=15, fontweight="bold", color=C["navy"])
@@ -331,7 +259,6 @@ for (col, label), ax in zip(
 plt.tight_layout()
 save("00_demographics_overview")
 
-# ── Theme 2: Community Challenges ────────────────────────────────────────────
 
 if COL_CHALLENGE_CODE in challenge_long.columns and len(challenge_long) > 0:
 
@@ -382,7 +309,6 @@ if COL_CHALLENGE_CODE in challenge_long.columns and len(challenge_long) > 0:
         grouped_pct_bar(ct, "Challenges by UWSM Connection Level")
         save("06_challenges_by_connection")
 
-# ── Theme 3: Who Feels Unheard? ───────────────────────────────────────────────
 
 if COL_UNHEARD in df.columns:
 
@@ -408,8 +334,6 @@ if COL_UNHEARD in df.columns:
         ct   = pd.crosstab(sub[COL_UNHEARD], sub[COL_CHALLENGE_CODE])
         grouped_pct_bar(ct, "Challenges: Unheard vs Heard Communities")
         save("10_challenges_unheard_vs_heard")
-
-# ── Theme 4: Engagement & ALICE-Specific Findings ────────────────────────────
 
 if COL_ENGAGEMENT in engagement_long.columns and len(engagement_long) > 0:
 
@@ -466,14 +390,7 @@ if len(stats_df) > 0:
         save("16_cramers_v_summary")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# SECTION 7 — EXPORT SUMMARY TABLES
-# ══════════════════════════════════════════════════════════════════════════════
-
-print("\n" + "=" * 60)
-print("SECTION 7 — Exporting summary tables → outputs/")
-print("=" * 60)
-
+# EXPORT SUMMARY TABLES
 with pd.ExcelWriter("outputs/uwsm_summary_tables.xlsx", engine="openpyxl") as writer:
 
     # Overall challenge frequency
@@ -528,9 +445,95 @@ with pd.ExcelWriter("outputs/uwsm_summary_tables.xlsx", engine="openpyxl") as wr
 print("  Saved → outputs/uwsm_summary_tables.xlsx")
 print("  Saved → outputs/statistical_tests.csv")
 
-# ── Final summary ─────────────────────────────────────────────────────────────
-print("\n" + "=" * 60)
-print("PIPELINE COMPLETE")
-print(f"  Figures  : figures/   ({len(os.listdir('figures'))} files)")
-print(f"  Outputs  : outputs/   ({len(os.listdir('outputs'))} files)")
-print("=" * 60)
+# adding census data to compare if respondernt demographics are a clear representive of the population
+PATH_CENSUS = "data/Counties race x ethn change 2020.xlsx"
+NAVY = "#1B3F6E"; GOLD = "#E87722"; LGRAY = "#F0F3F7"
+ 
+#Load & parse census (rows 0=Cumberland, 1=York; cols per P2 table)
+census_raw = pd.read_excel(PATH_CENSUS, sheet_name="Sheet1", header=0)
+cum, yor = census_raw.iloc[0], census_raw.iloc[1]
+combined  = float(cum.iloc[1]) + float(yor.iloc[1])
+ 
+# Column index(non-Hispanic cols 13-19, Hispanic col 10)
+COL_IDX = {13: "White", 14: "Black or African American",
+           15: "American Indian or Alaska Native", 16: "Asian",
+           17: "Native Hawaiian or Pacific Islander",
+           18: "Other Race", 19: "Two or More Races", 10: "Hispanic or Latino"}
+ 
+census_pct = {
+    label: (float(cum.iloc[i] or 0) + float(yor.iloc[i] or 0)) / combined * 100
+    for i, label in COL_IDX.items()
+}
+ 
+#  Map survey race labels → census labels, compute survey
+race_map = {
+    "White;":                                        "White",
+    "Black or African American;":                    "Black or African American",
+    "American Indian or Alaska Native;":             "American Indian or Alaska Native",
+    "Asian;":                                        "Asian",
+    "Native Hawaiian or Pacific Islander;":          "Native Hawaiian or Pacific Islander",
+    "Hispanic":                                      "Hispanic or Latino",
+    "Other;":                                        "Other Race",
+    "Prefer not to answer;":                         None,
+    # Multi-select combinations → Two or More Races
+    "Native Hawaiian or Pacific Islander;White;":    "Two or More Races",
+    "More than one":                                 "Two or More Races",
+}
+survey_race = df[COL_RACE].map(race_map).dropna()
+survey_pct  = (survey_race.value_counts() / len(survey_race) * 100).to_dict() 
+# Build comparison dataframe
+df_rep = pd.DataFrame({
+    "Group":           list(COL_IDX.values()),
+    "Census_2020_pct": [census_pct[g] for g in COL_IDX.values()],
+    "Survey_pct":      [survey_pct.get(g, 0) for g in COL_IDX.values()],
+}).assign(gap_pp=lambda d: d["Survey_pct"] - d["Census_2020_pct"])
+df_rep = df_rep[df_rep[["Census_2020_pct","Survey_pct"]].max(axis=1) > 0.05]
+df_rep = df_rep.sort_values("Census_2020_pct", ascending=False)
+ 
+# Short x-axis labels for chart
+df_rep["Label"] = df_rep["Group"].str.replace(
+    "Black or African American", "Black or African\nAmerican").str.replace(
+    "American Indian or Alaska Native", "Am. Indian or\nAlaska Native").str.replace(
+    "Native Hawaiian or Pacific Islander", "Native Hawaiian or\nPacific Islander").str.replace(
+    "Hispanic or Latino", "Hispanic or\nLatino").str.replace(
+    "Two or More Races", "Two or More\nRaces")
+ 
+# Chart: grouped bars (left) + gap (right)
+x, w = np.arange(len(df_rep)), 0.35
+fig, (ax, ax2) = plt.subplots(1, 2, figsize=(15, 6), gridspec_kw={"width_ratios": [2,1]})
+fig.patch.set_facecolor("white")
+ 
+for a in (ax, ax2):
+    a.set_facecolor(LGRAY); a.set_axisbelow(True)
+    a.spines[["top","right"]].set_visible(False)
+ 
+ax.yaxis.grid(True, color="white", linewidth=1.2)
+ax.bar(x - w/2, df_rep["Census_2020_pct"], w, label="2020 Census", color=NAVY, edgecolor="white")
+ax.bar(x + w/2, df_rep["Survey_pct"],       w, label="Survey",      color=GOLD, edgecolor="white")
+for i, (c, s) in enumerate(zip(df_rep["Census_2020_pct"], df_rep["Survey_pct"])):
+    if c > 0.3: ax.text(i-w/2, c+0.3, f"{c:.1f}%", ha="center", fontsize=7.5, color=NAVY, fontweight="bold")
+    if s > 0.3: ax.text(i+w/2, s+0.3, f"{s:.1f}%", ha="center", fontsize=7.5, color="#8B4A00", fontweight="bold")
+ax.set(xticks=x, ylabel="Percentage (%)",
+       ylim=(0, max(df_rep["Census_2020_pct"].max(), df_rep["Survey_pct"].max()) * 1.18))
+ax.set_xticklabels(df_rep["Label"], fontsize=9)
+ax.legend(fontsize=10)
+ax.set_title("Survey Respondents vs. 2020 Census\nRace/Ethnicity — Southern Maine",
+             fontsize=12, fontweight="bold", color=NAVY)
+ 
+ax2.xaxis.grid(True, color="white", linewidth=1.2)
+ax2.barh(df_rep["Label"], df_rep["gap_pp"],
+         color=[GOLD if g > 0 else NAVY for g in df_rep["gap_pp"]], edgecolor="white")
+ax2.axvline(0, color="#555555", linewidth=1.2)
+for bar, val in zip(ax2.patches, df_rep["gap_pp"]):
+    ax2.text(val + (0.05 if val >= 0 else -0.05),
+             bar.get_y() + bar.get_height()/2, f"{val:+.1f}pp",
+             va="center", ha="left" if val >= 0 else "right",
+             fontsize=8.5, fontweight="bold", color=GOLD if val > 0 else NAVY)
+ax2.set_xlabel("Percentage Point Difference\n(Survey − Census)")
+ax2.set_title("Representation Gap\n(+ = over-represented, − = under-represented)",
+              fontsize=11, fontweight="bold", color=NAVY)
+ 
+plt.tight_layout(pad=2.5)
+save("17_census_representation")
+ 
+df_rep.to_excel("outputs/census_representativeness.xlsx", index=False)
