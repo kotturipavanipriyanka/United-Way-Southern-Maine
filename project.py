@@ -213,7 +213,9 @@ def hbar(series, title, xlabel="Count", top_n=12, color=C["navy"],
 
 def grouped_pct_bar(ct, title, figsize=(12, 6)):
     """Stacked 100% bar chart — shows composition within each group."""
-    pct = ct.div(ct.sum(axis=1), axis=0) * 100
+    ct = ct[ct.sum(axis=1) >= 5]   # drop groups with fewer than 5 respondents
+    counts = ct.sum(axis=1)
+    pct = ct.div(counts, axis=0) * 100
     fig, ax = plt.subplots(figsize=figsize)
     pct.plot(kind="bar", stacked=True, ax=ax,
              color=PALETTE[:pct.shape[1]], edgecolor="white", linewidth=0.4)
@@ -223,12 +225,19 @@ def grouped_pct_bar(ct, title, figsize=(12, 6)):
     ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=8)
     ax.spines[["top", "right"]].set_visible(False)
     plt.xticks(rotation=30, ha="right", fontsize=9)
+    # Add respondent count below each bar label
+    for i, (label, n) in enumerate(counts.items()):
+        ax.text(i, -0.12, f"~{n}", ha="center", va="top",
+                fontsize=9, color=C["gray"],
+                transform=ax.get_xaxis_transform())
     plt.tight_layout()
     return fig
+ 
 
 
 def heatmap_chart(ct, title, figsize=(13, 7)):
     """Percentage heatmap — normalizes by row for direct group comparison."""
+    ct = ct[ct.sum(axis=1) >= 5]   # drop groups with fewer than 5 respondents
     pct = ct.div(ct.sum(axis=1), axis=0) * 100
     fig, ax = plt.subplots(figsize=figsize)
     sns.heatmap(pct, annot=True, fmt=".1f", cmap="Blues",
